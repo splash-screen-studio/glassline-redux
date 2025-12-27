@@ -1,14 +1,27 @@
 --!strict
--- Glassline Server v2.1.0 - Continuous terrain, corridor cuts through landscape
+-- Glassline Server v2.2.0 - Side terrain undulates with variety outside walls
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
--- Calculate floor height at Z position (sine wave)
+-- Calculate corridor floor height at Z position (main wave)
 local function getFloorHeight(z: number): number
 	return math.sin(z * Config.waveFrequency) * Config.waveAmplitude
+end
+
+-- Calculate side terrain height (locked at wall, undulates outward)
+local function getSideTerrainHeight(z: number, distFromWall: number): number
+	local baseHeight = getFloorHeight(z)  -- Locked to corridor at wall
+
+	-- Add variety based on distance from wall
+	-- Multiple wave frequencies for natural look
+	local wave1 = math.sin(z * 0.01 + distFromWall * 0.05) * (distFromWall * 0.3)
+	local wave2 = math.sin(z * 0.025 + distFromWall * 0.08) * (distFromWall * 0.15)
+	local wave3 = math.cos(z * 0.007) * (distFromWall * 0.2)
+
+	return baseHeight + wave1 + wave2 + wave3
 end
 
 -- Build obstacles (thin, on undulating floor, forgiving hitbox)
@@ -114,31 +127,37 @@ local function buildCorridor()
 	local resolution = 4  -- Terrain resolution
 
 	-- Generate continuous terrain - corridor cuts through it
+	local stripWidth = 8  -- Width of each terrain strip for height variation
+
 	for z = 0, len, resolution do
-		-- Same height for corridor and sides (continuous terrain)
-		local terrainY = getFloorHeight(z)
+		local corridorY = getFloorHeight(z)
 		local theme = getThemeAt(z)
 
 		-- Corridor floor (dark matte Asphalt - the "road" through terrain)
 		local corridorRegion = Region3.new(
-			Vector3.new(-w/2, terrainY - 30, z),
-			Vector3.new(w/2, terrainY, z + resolution)
+			Vector3.new(-w/2, corridorY - 30, z),
+			Vector3.new(w/2, corridorY, z + resolution)
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
 
-		-- Left side terrain (same height as corridor - continuous surface)
-		local leftRegion = Region3.new(
-			Vector3.new(-w/2 - sideWidth, terrainY - 30, z),
-			Vector3.new(-w/2 - 0.5, terrainY, z + resolution)
-		):ExpandToGrid(resolution)
-		terrain:FillRegion(leftRegion, resolution, theme)
+		-- Side terrain in strips (height varies with distance from wall)
+		for dist = 0, sideWidth - stripWidth, stripWidth do
+			local stripY = getSideTerrainHeight(z, dist + stripWidth/2)
 
-		-- Right side terrain (exactly matches left - continuous surface)
-		local rightRegion = Region3.new(
-			Vector3.new(w/2 + 0.5, terrainY - 30, z),
-			Vector3.new(w/2 + sideWidth, terrainY, z + resolution)
-		):ExpandToGrid(resolution)
-		terrain:FillRegion(rightRegion, resolution, theme)
+			-- Left side strip
+			local leftRegion = Region3.new(
+				Vector3.new(-w/2 - dist - stripWidth, stripY - 30, z),
+				Vector3.new(-w/2 - dist - 0.5, stripY, z + resolution)
+			):ExpandToGrid(resolution)
+			terrain:FillRegion(leftRegion, resolution, theme)
+
+			-- Right side strip (mirrors left exactly)
+			local rightRegion = Region3.new(
+				Vector3.new(w/2 + dist + 0.5, stripY - 30, z),
+				Vector3.new(w/2 + dist + stripWidth, stripY, z + resolution)
+			):ExpandToGrid(resolution)
+			terrain:FillRegion(rightRegion, resolution, theme)
+		end
 	end
 
 	-- Glass walls
