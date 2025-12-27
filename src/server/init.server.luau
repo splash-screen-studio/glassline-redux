@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.15.0 - Progressive terrain: realistic → bizarre
+-- Glassline Server v2.15.1 - Test mode: collide but don't die
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -7,10 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
--- Collision groups for test mode pass-through
+-- Collision group for obstacles (used for collision detection)
 PhysicsService:RegisterCollisionGroup("Obstacles")
-PhysicsService:RegisterCollisionGroup("TestModePlayers")
-PhysicsService:CollisionGroupSetCollidable("Obstacles", "TestModePlayers", false)
 
 -- Per-player mode (randomized on each respawn)
 local playerModes: { [Player]: boolean } = {}  -- true = test mode, false = normal
@@ -411,15 +409,6 @@ local SPAWN_POS = Vector3.new(0, ZONES.SPAWN_FLOOR_Y + 3, (ZONES.SPAWN_START + Z
 local LOOK_AT = Vector3.new(0, ZONES.SPAWN_FLOOR_Y + 3, ZONES.TRANSITION_END)  -- Look down the corridor (+Z)
 local SPAWN_CFRAME = CFrame.lookAt(SPAWN_POS, LOOK_AT)
 
--- Set collision group for all character parts
-local function setCharacterCollisionGroup(character: Model, groupName: string)
-	for _, part in character:GetDescendants() do
-		if part:IsA("BasePart") then
-			part.CollisionGroup = groupName
-		end
-	end
-end
-
 -- Fast player setup
 local function setupPlayer(player: Player)
 	player.CharacterAdded:Connect(function(character)
@@ -432,16 +421,9 @@ local function setupPlayer(player: Player)
 		local mode = isTestMode and "TEST (no death)" or "NORMAL (deadly)"
 		print("[Server] " .. player.Name .. " spawned in " .. mode .. " mode")
 
-		-- Set collision group based on mode
-		if isTestMode then
-			setCharacterCollisionGroup(character, "TestModePlayers")
-			-- Also catch any parts added later (accessories, tools)
-			character.DescendantAdded:Connect(function(desc)
-				if desc:IsA("BasePart") then
-					desc.CollisionGroup = "TestModePlayers"
-				end
-			end)
-		end
+		-- Test mode: collide with obstacles but don't die
+		-- (Death prevention is handled in setupDeathTouch via playerModes check)
+		-- No collision group change needed - we WANT collision, just no death
 
 		-- Force exact spawn position and orientation
 		hrp.CFrame = SPAWN_CFRAME
