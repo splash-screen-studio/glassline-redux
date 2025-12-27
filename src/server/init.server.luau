@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.11.0 - Water stays outside glass walls
+-- Glassline Server v2.12.0 - Bulletproof water margin (12 studs)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -272,14 +272,15 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (outside corridor only - must not penetrate glass walls)
-	-- Glass walls are at X = ±(w/2 + 0.25), thickness 0.5
-	-- Water must stop outside the glass: at least 1 stud margin for terrain voxels
+	-- Water (outside corridor only)
+	-- IMPORTANT: Terrain water CANNOT be contained by parts in Roblox!
+	-- Water voxels ignore glass walls. Must keep water far from corridor.
+	-- Using 12-stud margin (3 voxels) to guarantee no bleeding.
 	local waterDepth = 25
-	local waterMargin = 1  -- Keep water 1 stud outside glass wall
-	local waterInnerX = w/2 + 0.5 + waterMargin  -- Glass outer edge + margin
+	local waterMargin = 12  -- 3 terrain voxels = bulletproof margin
+	local waterInnerX = w/2 + waterMargin
 
-	-- Left side water
+	-- Left side water (starts 12 studs from corridor edge)
 	terrain:FillRegion(
 		Region3.new(
 			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
@@ -298,25 +299,17 @@ local function buildCorridor()
 		Enum.Material.Water
 	)
 
-	-- ROBUST: Clear any terrain that leaked into corridor interior
-	-- This ensures water/terrain never appears inside the glass walls
+	-- BELT AND SUSPENDERS: Clear entire corridor interior of any terrain except floor
+	-- Clear from glass wall to glass wall, above the floor
+	local clearMargin = 8  -- Clear 8 studs past corridor edge to catch any voxel bleed
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2, -50, ZONES.SPAWN_END),
-			Vector3.new(w/2, Config.waterLevel + 10, len)
+			Vector3.new(-w/2 - clearMargin, Config.waterLevel - 10, ZONES.SPAWN_END),
+			Vector3.new(w/2 + clearMargin, Config.waterLevel + 50, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Air
 	)
-	-- Then re-fill the corridor floor (which we just cleared above water level)
-	for z = ZONES.SPAWN_END, len, resolution do
-		local corridorY = getFloorHeight(z)
-		local corridorRegion = Region3.new(
-			Vector3.new(-w/2, corridorY - 40, z),
-			Vector3.new(w/2, corridorY, z + resolution)
-		):ExpandToGrid(resolution)
-		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
-	end
 
 	corridor.Parent = workspace
 
