@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.15.1 - Test mode: collide but don't die
+-- Glassline Server v2.16.0 - Altitude-based terrain + dual water system
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -127,40 +127,61 @@ local function setupDeathTouch(obstacles: Folder)
 	end
 end
 
--- Scene themes: realistic → bizarre (no cycling back)
--- Ordered from normal nature to increasingly alien/surreal
-local THEMES = {
-	-- REALISTIC (zones 1-4)
-	Enum.Material.Grass,       -- 1: Green meadow - familiar start
-	Enum.Material.LeafyGrass,  -- 2: Lush forest floor
-	Enum.Material.Ground,      -- 3: Dirt path
-	Enum.Material.Sand,        -- 4: Beach/desert
+-- Zone palettes: each zone has materials for different altitudes
+-- Progresses from realistic natural scenes to bizarre alien landscapes
+local ZONE_PALETTES = {
+	-- REALISTIC NATURE (zones 1-4)
+	{ low = Enum.Material.Grass, mid = Enum.Material.Rock, high = Enum.Material.Snow },
+	{ low = Enum.Material.LeafyGrass, mid = Enum.Material.Slate, high = Enum.Material.Snow },
+	{ low = Enum.Material.Ground, mid = Enum.Material.Rock, high = Enum.Material.Ice },
+	{ low = Enum.Material.Sand, mid = Enum.Material.Sandstone, high = Enum.Material.Snow },
 
-	-- NATURAL BUT HARSHER (zones 5-8)
-	Enum.Material.Rock,        -- 5: Rocky terrain
-	Enum.Material.Slate,       -- 6: Grey stone
-	Enum.Material.Snow,        -- 7: Winter
-	Enum.Material.Ice,         -- 8: Frozen
+	-- HARSHER ENVIRONMENTS (zones 5-8)
+	{ low = Enum.Material.Mud, mid = Enum.Material.Rock, high = Enum.Material.Slate },
+	{ low = Enum.Material.Ground, mid = Enum.Material.Slate, high = Enum.Material.Ice },
+	{ low = Enum.Material.Snow, mid = Enum.Material.Ice, high = Enum.Material.Glacier },
+	{ low = Enum.Material.Ice, mid = Enum.Material.Glacier, high = Enum.Material.Snow },
 
 	-- STRANGE (zones 9-12)
-	Enum.Material.Mud,         -- 9: Murky swamp
-	Enum.Material.Limestone,   -- 10: Pale alien cliffs
-	Enum.Material.Sandstone,   -- 11: Mars-like
-	Enum.Material.Salt,        -- 12: Crystalline white
+	{ low = Enum.Material.Mud, mid = Enum.Material.Limestone, high = Enum.Material.Salt },
+	{ low = Enum.Material.Limestone, mid = Enum.Material.Sandstone, high = Enum.Material.Salt },
+	{ low = Enum.Material.Sandstone, mid = Enum.Material.Salt, high = Enum.Material.Limestone },
+	{ low = Enum.Material.Salt, mid = Enum.Material.Glacier, high = Enum.Material.Ice },
 
-	-- ALIEN (zones 13-16)
-	Enum.Material.Glacier,     -- 13: Blue ice
-	Enum.Material.Basalt,      -- 14: Dark volcanic
-	Enum.Material.Pavement,    -- 15: Artificial/constructed
-	Enum.Material.CrackedLava, -- 16: Hellscape - final form
+	-- ALIEN/HELLSCAPE (zones 13-16)
+	{ low = Enum.Material.Basalt, mid = Enum.Material.Slate, high = Enum.Material.Glacier },
+	{ low = Enum.Material.Basalt, mid = Enum.Material.CrackedLava, high = Enum.Material.Slate },
+	{ low = Enum.Material.CrackedLava, mid = Enum.Material.Basalt, high = Enum.Material.Slate },
+	{ low = Enum.Material.CrackedLava, mid = Enum.Material.CrackedLava, high = Enum.Material.Basalt },
 }
 
--- Get theme for a Z position (progresses, doesn't cycle back)
-local function getThemeAt(z: number): Enum.Material
+-- Altitude thresholds for material selection
+local ALTITUDE = {
+	waterLevel = Config.waterLevel,  -- Below this = Water
+	lowToMid = 5,                    -- Below this = low material
+	midToHigh = 15,                  -- Below this = mid material, above = high
+}
+
+-- Get material based on zone (Z) and altitude (Y)
+local function getMaterialAt(z: number, y: number): Enum.Material
+	-- Below water level = terrain water
+	if y < ALTITUDE.waterLevel then
+		return Enum.Material.Water
+	end
+
+	-- Get zone palette (progresses, doesn't cycle)
 	local zoneIndex = math.floor(z / Config.zoneLength) + 1
-	-- Clamp to last theme (stays bizarre once you reach the end)
-	zoneIndex = math.min(zoneIndex, #THEMES)
-	return THEMES[zoneIndex]
+	zoneIndex = math.min(zoneIndex, #ZONE_PALETTES)
+	local palette = ZONE_PALETTES[zoneIndex]
+
+	-- Select material based on altitude
+	if y < ALTITUDE.lowToMid then
+		return palette.low
+	elseif y < ALTITUDE.midToHigh then
+		return palette.mid
+	else
+		return palette.high
+	end
 end
 
 -- Build the corridor cutting through continuous terrain
@@ -186,7 +207,6 @@ local function buildCorridor()
 
 	for z = ZONES.SPAWN_END, len, resolution do
 		local corridorY = getFloorHeight(z)
-		local theme = getThemeAt(z)
 
 		-- Corridor floor (dark matte Asphalt - the "road" through terrain)
 		local corridorRegion = Region3.new(
@@ -202,6 +222,9 @@ local function buildCorridor()
 				local distFromWall = stripStart + stripWidth / 2
 				local stripY = getSideTerrainHeight(z, distFromWall)
 
+				-- Get material based on altitude (snow high, grass low, water underwater)
+				local material = getMaterialAt(z, stripY)
+
 				-- Left side strip (going outward from wall)
 				local leftX1 = -w/2 - stripStart - stripWidth
 				local leftX2 = -w/2 - stripStart
@@ -209,7 +232,7 @@ local function buildCorridor()
 					Vector3.new(leftX1, stripY - 40, z),
 					Vector3.new(leftX2, stripY, z + resolution)
 				):ExpandToGrid(resolution)
-				terrain:FillRegion(leftRegion, resolution, theme)
+				terrain:FillRegion(leftRegion, resolution, material)
 
 				-- Right side strip (mirrors left exactly)
 				local rightX1 = w/2 + stripStart
@@ -218,7 +241,7 @@ local function buildCorridor()
 					Vector3.new(rightX1, stripY - 40, z),
 					Vector3.new(rightX2, stripY, z + resolution)
 				):ExpandToGrid(resolution)
-				terrain:FillRegion(rightRegion, resolution, theme)
+				terrain:FillRegion(rightRegion, resolution, material)
 			end
 		end
 	end
@@ -286,48 +309,66 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (Part-based, visual only - no terrain water!)
-	-- Terrain water cannot be contained by parts.
-	-- Part-based water can be positioned exactly against glass walls.
-	-- Players see water through glass but never enter it.
-	local waterFolder = Instance.new("Folder")
-	waterFolder.Name = "Water"
-	waterFolder.Parent = corridor
+	-- UNDERWATER CORRIDOR SECTIONS (Part-based water inside corridor)
+	-- When corridor floor dips below water level, fill that section with water Part
+	-- Player runs through it (visual only, no swimming)
+	local underwaterFolder = Instance.new("Folder")
+	underwaterFolder.Name = "UnderwaterSections"
+	underwaterFolder.Parent = corridor
 
-	local waterDepth = 30
 	local waterColor = Color3.fromRGB(30, 100, 180)
-	local waterTransparency = 0.3
+	local waterTransparency = 0.4
 
-	-- Segment water like walls (Roblox 2048 limit)
-	for segStart = ZONES.TRANSITION_END, len, MAX_SEGMENT do
-		local segEnd = math.min(segStart + MAX_SEGMENT, len)
-		local segLen = segEnd - segStart
-		local segMidZ = segStart + segLen / 2
+	-- Scan corridor for underwater sections
+	local underwaterStart = nil
+	for z = ZONES.TRANSITION_END, len, resolution do
+		local floorY = getFloorHeight(z)
+		local isUnderwater = floorY < Config.waterLevel
 
-		-- Left water (pressed against left glass wall)
-		local leftWater = Instance.new("Part")
-		leftWater.Name = "LeftWater_" .. segStart
-		leftWater.Anchored = true
-		leftWater.CanCollide = false  -- Inside terrain, doesn't need collision
-		leftWater.Size = Vector3.new(sideWidth, waterDepth, segLen)
-		leftWater.Position = Vector3.new(-w/2 - sideWidth/2 - 0.5, Config.waterLevel - waterDepth/2, segMidZ)
-		leftWater.Material = Enum.Material.Glass
-		leftWater.Color = waterColor
-		leftWater.Transparency = waterTransparency
-		leftWater.Parent = waterFolder
+		if isUnderwater and not underwaterStart then
+			-- Start of underwater section
+			underwaterStart = z
+		elseif not isUnderwater and underwaterStart then
+			-- End of underwater section - create water Part
+			local sectionLen = z - underwaterStart
+			local midZ = underwaterStart + sectionLen / 2
+			local waterHeight = Config.waterLevel - getFloorHeight(midZ) + 5  -- Extend above surface
 
-		-- Right water (pressed against right glass wall)
-		local rightWater = Instance.new("Part")
-		rightWater.Name = "RightWater_" .. segStart
-		rightWater.Anchored = true
-		rightWater.CanCollide = false
-		rightWater.Size = Vector3.new(sideWidth, waterDepth, segLen)
-		rightWater.Position = Vector3.new(w/2 + sideWidth/2 + 0.5, Config.waterLevel - waterDepth/2, segMidZ)
-		rightWater.Material = Enum.Material.Glass
-		rightWater.Color = waterColor
-		rightWater.Transparency = waterTransparency
-		rightWater.Parent = waterFolder
+			local waterPart = Instance.new("Part")
+			waterPart.Name = "UnderwaterSection_" .. underwaterStart
+			waterPart.Anchored = true
+			waterPart.CanCollide = false
+			waterPart.Size = Vector3.new(w - 0.5, waterHeight, sectionLen)
+			waterPart.Position = Vector3.new(0, Config.waterLevel - waterHeight/2 + 2, midZ)
+			waterPart.Material = Enum.Material.Glass
+			waterPart.Color = waterColor
+			waterPart.Transparency = waterTransparency
+			waterPart.Parent = underwaterFolder
+
+			underwaterStart = nil
+		end
 	end
+
+	-- Handle case where corridor ends while still underwater
+	if underwaterStart then
+		local sectionLen = len - underwaterStart
+		local midZ = underwaterStart + sectionLen / 2
+		local waterHeight = Config.waterLevel - getFloorHeight(midZ) + 5
+
+		local waterPart = Instance.new("Part")
+		waterPart.Name = "UnderwaterSection_" .. underwaterStart
+		waterPart.Anchored = true
+		waterPart.CanCollide = false
+		waterPart.Size = Vector3.new(w - 0.5, waterHeight, sectionLen)
+		waterPart.Position = Vector3.new(0, Config.waterLevel - waterHeight/2 + 2, midZ)
+		waterPart.Material = Enum.Material.Glass
+		waterPart.Color = waterColor
+		waterPart.Transparency = waterTransparency
+		waterPart.Parent = underwaterFolder
+	end
+
+	-- NOTE: Terrain water for outside pools is handled by getMaterialAt()
+	-- returning Water material for terrain below waterLevel
 
 	corridor.Parent = workspace
 
