@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.8.0 - Seamless spawn to corridor
+-- Glassline Server v2.9.0 - Robust zone framework
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,12 +15,44 @@ PhysicsService:CollisionGroupSetCollidable("Obstacles", "TestModePlayers", false
 -- Per-player mode (randomized on each respawn)
 local playerModes: { [Player]: boolean } = {}  -- true = test mode, false = normal
 
--- Calculate corridor floor height at Z position (multiple waves for variety)
-local function getFloorHeight(z: number): number
+--[[
+	ZONE FRAMEWORK - Single source of truth for all boundaries
+
+	Zone Layout (Z axis):
+	Z < -15      : VOID (behind back wall, nothing here)
+	Z = -15 to 0 : SPAWN ZONE - flat floor at Y=0, Part-based walls
+	Z = 0 to 100 : TRANSITION ZONE - floor blends from Y=0 to wave, no side terrain
+	Z > 100      : GAME ZONE - full wave terrain, side terrain, water, obstacles
+]]
+local ZONES = {
+	SPAWN_START = -15,      -- Back wall of spawn room
+	SPAWN_END = 0,          -- Where spawn room opens to corridor
+	TRANSITION_END = 100,   -- Where full wave terrain begins
+	SPAWN_FLOOR_Y = 0,      -- Spawn room floor height (top surface)
+}
+
+-- Calculate raw wave height (before zone blending)
+local function getRawWaveHeight(z: number): number
 	local mainWave = math.sin(z * Config.waveFrequency) * Config.waveAmplitude
 	local secondWave = math.sin(z * Config.waveFrequency * 2.7) * (Config.waveAmplitude * 0.3)
 	local thirdWave = math.cos(z * Config.waveFrequency * 0.5) * (Config.waveAmplitude * 0.5)
 	return mainWave + secondWave + thirdWave
+end
+
+-- Calculate corridor floor height with zone blending
+local function getFloorHeight(z: number): number
+	if z <= ZONES.SPAWN_END then
+		-- Spawn zone: flat at spawn floor level
+		return ZONES.SPAWN_FLOOR_Y
+	elseif z <= ZONES.TRANSITION_END then
+		-- Transition zone: blend from spawn floor to wave height
+		local t = (z - ZONES.SPAWN_END) / (ZONES.TRANSITION_END - ZONES.SPAWN_END)
+		local waveHeight = getRawWaveHeight(z)
+		return ZONES.SPAWN_FLOOR_Y + (waveHeight - ZONES.SPAWN_FLOOR_Y) * t
+	else
+		-- Game zone: full wave
+		return getRawWaveHeight(z)
+	end
 end
 
 -- Calculate side terrain height (locked at wall, undulates outward)
@@ -37,12 +69,13 @@ local function getSideTerrainHeight(z: number, distFromWall: number): number
 end
 
 -- Build obstacles (thin, on undulating floor, forgiving hitbox)
+-- Obstacles only appear in GAME ZONE (after TRANSITION_END)
 local function buildObstacles()
 	local obstacles = Instance.new("Folder")
 	obstacles.Name = "Obstacles"
 	obstacles.Parent = workspace
 
-	local z = Config.obstacleStartZ
+	local z = ZONES.TRANSITION_END  -- Obstacles start in game zone
 	local count = 0
 	local pillarHeight = 8
 	local w = Config.obstacleWidth
@@ -130,13 +163,14 @@ local function buildCorridor()
 	-- Fill terrain using voxels for smooth undulations
 	local resolution = 4  -- Terrain resolution
 
-	-- Generate continuous terrain - corridor cuts through it
+	-- Generate terrain using ZONES framework
 	local stripWidth = 12  -- Width of each terrain strip
 
-	-- Corridor floor starts before spawn room so there's no gap
-	local corridorStartZ = -20
+	-- Corridor floor starts at spawn room exit (Z=0) - spawn room has Part floor
+	-- Transition zone (0 to TRANSITION_END): only corridor floor, no side terrain
+	-- Game zone (TRANSITION_END+): full corridor + side terrain
 
-	for z = corridorStartZ, len, resolution do
+	for z = ZONES.SPAWN_END, len, resolution do
 		local corridorY = getFloorHeight(z)
 		local theme = getThemeAt(z)
 
@@ -147,8 +181,8 @@ local function buildCorridor()
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
 
-		-- Side terrain starts after spawn exit (Z=40) to not block entrance
-		if z >= 40 then
+		-- Side terrain only in GAME ZONE (after transition)
+		if z >= ZONES.TRANSITION_END then
 			-- Side terrain in strips (height varies with distance from wall)
 			for stripStart = 0, sideWidth - stripWidth, stripWidth do
 				local distFromWall = stripStart + stripWidth / 2
@@ -199,12 +233,12 @@ local function buildCorridor()
 	rightWall.Transparency = 0.7
 	rightWall.Parent = corridor
 
-	-- Glass ceiling
+	-- Glass ceiling (starts at SPAWN_END where corridor begins)
 	local ceilingFolder = Instance.new("Folder")
 	ceilingFolder.Name = "Ceiling"
 	ceilingFolder.Parent = corridor
 
-	for z = 0, len, 20 do
+	for z = ZONES.SPAWN_END, len, 20 do
 		local y1 = getFloorHeight(z) + h
 		local y2 = getFloorHeight(z + 20) + h
 		local avgY = (y1 + y2) / 2
@@ -222,13 +256,12 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (outside corridor only - presses against glass walls, starts after spawn)
+	-- Water (outside corridor only - starts in GAME ZONE with side terrain)
 	local waterDepth = 25
-	local waterStartZ = 40  -- Same as side terrain start
 	-- Left side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, waterStartZ),
+			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
 			Vector3.new(-w/2, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
@@ -237,7 +270,7 @@ local function buildCorridor()
 	-- Right side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(w/2, Config.waterLevel - waterDepth, waterStartZ),
+			Vector3.new(w/2, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
@@ -246,59 +279,60 @@ local function buildCorridor()
 
 	corridor.Parent = workspace
 
-	-- Spawn room at corridor start (room behind Z=0, opens into corridor at +Z)
+	-- Spawn room using ZONES framework
 	local spawnRoom = Instance.new("Model")
 	spawnRoom.Name = "SpawnRoom"
 
-	local roomDepth = 15
+	local roomDepth = ZONES.SPAWN_END - ZONES.SPAWN_START  -- 15 studs
+	local roomMidZ = (ZONES.SPAWN_START + ZONES.SPAWN_END) / 2  -- -7.5
 
-	-- Back wall (behind player at negative Z)
+	-- Back wall (at SPAWN_START)
 	local backWall = Instance.new("Part")
 	backWall.Name = "BackWall"
 	backWall.Anchored = true
 	backWall.Size = Vector3.new(w + 2, h, 1)
-	backWall.Position = Vector3.new(0, h/2, -roomDepth)
+	backWall.Position = Vector3.new(0, h/2 + ZONES.SPAWN_FLOOR_Y, ZONES.SPAWN_START)
 	backWall.Material = Enum.Material.SmoothPlastic
 	backWall.Color = Color3.fromRGB(40, 40, 45)
 	backWall.Parent = spawnRoom
 
-	-- Left side wall (from back wall to corridor start)
+	-- Left side wall (from SPAWN_START to SPAWN_END)
 	local leftBlock = Instance.new("Part")
 	leftBlock.Name = "LeftBlock"
 	leftBlock.Anchored = true
 	leftBlock.Size = Vector3.new(1, h, roomDepth)
-	leftBlock.Position = Vector3.new(-w/2 - 0.5, h/2, -roomDepth/2)
+	leftBlock.Position = Vector3.new(-w/2 - 0.5, h/2 + ZONES.SPAWN_FLOOR_Y, roomMidZ)
 	leftBlock.Material = Enum.Material.SmoothPlastic
 	leftBlock.Color = Color3.fromRGB(40, 40, 45)
 	leftBlock.Parent = spawnRoom
 
-	-- Right side wall (from back wall to corridor start)
+	-- Right side wall (from SPAWN_START to SPAWN_END)
 	local rightBlock = Instance.new("Part")
 	rightBlock.Name = "RightBlock"
 	rightBlock.Anchored = true
 	rightBlock.Size = Vector3.new(1, h, roomDepth)
-	rightBlock.Position = Vector3.new(w/2 + 0.5, h/2, -roomDepth/2)
+	rightBlock.Position = Vector3.new(w/2 + 0.5, h/2 + ZONES.SPAWN_FLOOR_Y, roomMidZ)
 	rightBlock.Material = Enum.Material.SmoothPlastic
 	rightBlock.Color = Color3.fromRGB(40, 40, 45)
 	rightBlock.Parent = spawnRoom
 
-	-- Floor for spawn room
+	-- Floor for spawn room (top surface at SPAWN_FLOOR_Y)
 	local spawnFloor = Instance.new("Part")
 	spawnFloor.Name = "SpawnFloor"
 	spawnFloor.Anchored = true
 	spawnFloor.Size = Vector3.new(w, 1, roomDepth)
-	spawnFloor.Position = Vector3.new(0, -0.5, -roomDepth/2)
+	spawnFloor.Position = Vector3.new(0, ZONES.SPAWN_FLOOR_Y - 0.5, roomMidZ)
 	spawnFloor.Material = Enum.Material.SmoothPlastic
 	spawnFloor.Color = Color3.fromRGB(35, 35, 40)
 	spawnFloor.Parent = spawnRoom
 
 	spawnRoom.Parent = workspace
 
-	-- Spawn location (in room, facing +Z into corridor)
+	-- Spawn location (in spawn room, facing +Z into corridor)
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Anchored = true
 	spawn.Size = Vector3.new(6, 1, 6)
-	spawn.CFrame = CFrame.new(0, 0.5, -roomDepth/2) * CFrame.Angles(0, math.pi, 0)
+	spawn.CFrame = CFrame.new(0, ZONES.SPAWN_FLOOR_Y + 0.5, roomMidZ) * CFrame.Angles(0, math.pi, 0)
 	spawn.Transparency = 1
 	spawn.Neutral = true
 	spawn.Parent = workspace
@@ -306,9 +340,9 @@ local function buildCorridor()
 	print("[Server] Corridor built: " .. len .. " studs")
 end
 
--- Spawn position and direction (lookAt is foolproof)
-local SPAWN_POS = Vector3.new(0, 3, -7)
-local LOOK_AT = Vector3.new(0, 3, 100)  -- Look down the corridor (+Z)
+-- Spawn position and direction using ZONES (lookAt is foolproof)
+local SPAWN_POS = Vector3.new(0, ZONES.SPAWN_FLOOR_Y + 3, (ZONES.SPAWN_START + ZONES.SPAWN_END) / 2)
+local LOOK_AT = Vector3.new(0, ZONES.SPAWN_FLOOR_Y + 3, ZONES.TRANSITION_END)  -- Look down the corridor (+Z)
 local SPAWN_CFRAME = CFrame.lookAt(SPAWN_POS, LOOK_AT)
 
 -- Set collision group for all character parts
