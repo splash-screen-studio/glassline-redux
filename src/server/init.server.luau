@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.9.1 - Fix glass wall positioning
+-- Glassline Server v2.10.0 - Segmented walls (Roblox 2048 limit)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -209,32 +209,45 @@ local function buildCorridor()
 		end
 	end
 
-	-- Glass walls (must cover full height range: from lowest floor to ceiling)
-	-- Floor ranges from Y=0 (spawn) through wave oscillation (-amplitude to +amplitude)
+	-- Glass walls (segmented - Roblox max part size is 2048 studs)
+	-- Must cover full height range: from lowest floor to ceiling
 	local lowestFloor = -Config.waveAmplitude
 	local highestCeiling = Config.waveAmplitude + h
 	local wallHeight = highestCeiling - lowestFloor + 20  -- Extra margin
 	local wallY = (lowestFloor + highestCeiling) / 2  -- Center of wall
 
-	local leftWall = Instance.new("Part")
-	leftWall.Name = "LeftWall"
-	leftWall.Anchored = true
-	leftWall.Size = Vector3.new(0.5, wallHeight, len)
-	leftWall.Position = Vector3.new(-w/2 - 0.25, wallY, len/2)
-	leftWall.Material = Enum.Material.Glass
-	leftWall.Color = Color3.fromRGB(200, 230, 255)
-	leftWall.Transparency = 0.7
-	leftWall.Parent = corridor
+	local MAX_SEGMENT = 2000  -- Stay under Roblox's 2048 limit
+	local wallFolder = Instance.new("Folder")
+	wallFolder.Name = "Walls"
+	wallFolder.Parent = corridor
 
-	local rightWall = Instance.new("Part")
-	rightWall.Name = "RightWall"
-	rightWall.Anchored = true
-	rightWall.Size = Vector3.new(0.5, wallHeight, len)
-	rightWall.Position = Vector3.new(w/2 + 0.25, wallY, len/2)
-	rightWall.Material = Enum.Material.Glass
-	rightWall.Color = Color3.fromRGB(200, 230, 255)
-	rightWall.Transparency = 0.7
-	rightWall.Parent = corridor
+	for segStart = ZONES.SPAWN_END, len, MAX_SEGMENT do
+		local segEnd = math.min(segStart + MAX_SEGMENT, len)
+		local segLen = segEnd - segStart
+		local segMidZ = segStart + segLen / 2
+
+		-- Left wall segment
+		local leftSeg = Instance.new("Part")
+		leftSeg.Name = "LeftWall_" .. segStart
+		leftSeg.Anchored = true
+		leftSeg.Size = Vector3.new(0.5, wallHeight, segLen)
+		leftSeg.Position = Vector3.new(-w/2 - 0.25, wallY, segMidZ)
+		leftSeg.Material = Enum.Material.Glass
+		leftSeg.Color = Color3.fromRGB(200, 230, 255)
+		leftSeg.Transparency = 0.7
+		leftSeg.Parent = wallFolder
+
+		-- Right wall segment
+		local rightSeg = Instance.new("Part")
+		rightSeg.Name = "RightWall_" .. segStart
+		rightSeg.Anchored = true
+		rightSeg.Size = Vector3.new(0.5, wallHeight, segLen)
+		rightSeg.Position = Vector3.new(w/2 + 0.25, wallY, segMidZ)
+		rightSeg.Material = Enum.Material.Glass
+		rightSeg.Color = Color3.fromRGB(200, 230, 255)
+		rightSeg.Transparency = 0.7
+		rightSeg.Parent = wallFolder
+	end
 
 	-- Glass ceiling (starts at SPAWN_END where corridor begins)
 	local ceilingFolder = Instance.new("Folder")
