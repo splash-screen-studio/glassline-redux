@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.16.0 - Altitude-based terrain + dual water system
+-- Glassline Server v2.17.0 - Hand-crafted biome system
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -127,61 +127,207 @@ local function setupDeathTouch(obstacles: Folder)
 	end
 end
 
--- Zone palettes: each zone has materials for different altitudes
--- Progresses from realistic natural scenes to bizarre alien landscapes
-local ZONE_PALETTES = {
-	-- REALISTIC NATURE (zones 1-4)
-	{ low = Enum.Material.Grass, mid = Enum.Material.Rock, high = Enum.Material.Snow },
-	{ low = Enum.Material.LeafyGrass, mid = Enum.Material.Slate, high = Enum.Material.Snow },
-	{ low = Enum.Material.Ground, mid = Enum.Material.Rock, high = Enum.Material.Ice },
-	{ low = Enum.Material.Sand, mid = Enum.Material.Sandstone, high = Enum.Material.Snow },
+--[[
+	BIOME SYSTEM - Hand-crafted zones with natural material layering
+	Each biome has:
+	- name: For debugging/display
+	- length: How long this zone runs (studs)
+	- layers: Altitude-based materials (checked top to bottom)
 
-	-- HARSHER ENVIRONMENTS (zones 5-8)
-	{ low = Enum.Material.Mud, mid = Enum.Material.Rock, high = Enum.Material.Slate },
-	{ low = Enum.Material.Ground, mid = Enum.Material.Slate, high = Enum.Material.Ice },
-	{ low = Enum.Material.Snow, mid = Enum.Material.Ice, high = Enum.Material.Glacier },
-	{ low = Enum.Material.Ice, mid = Enum.Material.Glacier, high = Enum.Material.Snow },
+	Progression: Realistic nature → Strange → Bizarre/Surreal
+]]
+local BIOMES = {
+	-- === REALISTIC NATURE ===
+	{
+		name = "Meadow",
+		length = 400,
+		layers = {
+			{ below = -5, mat = Enum.Material.Water },
+			{ below = 3, mat = Enum.Material.Grass },
+			{ below = 8, mat = Enum.Material.LeafyGrass },
+			{ below = 15, mat = Enum.Material.Rock },
+			{ below = 999, mat = Enum.Material.Snow },
+		}
+	},
+	{
+		name = "Forest Valley",
+		length = 450,
+		layers = {
+			{ below = -3, mat = Enum.Material.Water },
+			{ below = 2, mat = Enum.Material.Mud },
+			{ below = 6, mat = Enum.Material.LeafyGrass },
+			{ below = 12, mat = Enum.Material.Ground },
+			{ below = 20, mat = Enum.Material.Rock },
+			{ below = 999, mat = Enum.Material.Snow },
+		}
+	},
+	{
+		name = "Mountain Pass",
+		length = 500,
+		layers = {
+			{ below = 0, mat = Enum.Material.Water },
+			{ below = 5, mat = Enum.Material.Ground },
+			{ below = 10, mat = Enum.Material.Rock },
+			{ below = 18, mat = Enum.Material.Slate },
+			{ below = 999, mat = Enum.Material.Snow },
+		}
+	},
+	{
+		name = "Sandy Beach",
+		length = 350,
+		layers = {
+			{ below = -2, mat = Enum.Material.Water },
+			{ below = 4, mat = Enum.Material.Sand },
+			{ below = 10, mat = Enum.Material.Sandstone },
+			{ below = 999, mat = Enum.Material.Rock },
+		}
+	},
 
-	-- STRANGE (zones 9-12)
-	{ low = Enum.Material.Mud, mid = Enum.Material.Limestone, high = Enum.Material.Salt },
-	{ low = Enum.Material.Limestone, mid = Enum.Material.Sandstone, high = Enum.Material.Salt },
-	{ low = Enum.Material.Sandstone, mid = Enum.Material.Salt, high = Enum.Material.Limestone },
-	{ low = Enum.Material.Salt, mid = Enum.Material.Glacier, high = Enum.Material.Ice },
+	-- === TRANSITION - HARSHER ===
+	{
+		name = "Desert Dunes",
+		length = 400,
+		layers = {
+			{ below = 5, mat = Enum.Material.Sand },
+			{ below = 12, mat = Enum.Material.Sandstone },
+			{ below = 20, mat = Enum.Material.Rock },
+			{ below = 999, mat = Enum.Material.Slate },
+		}
+	},
+	{
+		name = "Frozen Lake",
+		length = 450,
+		layers = {
+			{ below = -5, mat = Enum.Material.Water },
+			{ below = 0, mat = Enum.Material.Ice },
+			{ below = 8, mat = Enum.Material.Snow },
+			{ below = 15, mat = Enum.Material.Glacier },
+			{ below = 999, mat = Enum.Material.Ice },
+		}
+	},
+	{
+		name = "Brick Warehouse",
+		length = 200,
+		layers = {
+			{ below = 3, mat = Enum.Material.Concrete },
+			{ below = 999, mat = Enum.Material.Brick },
+		}
+	},
+	{
+		name = "Wooden Tavern",
+		length = 200,
+		layers = {
+			{ below = 2, mat = Enum.Material.Ground },
+			{ below = 999, mat = Enum.Material.WoodPlanks },
+		}
+	},
 
-	-- ALIEN/HELLSCAPE (zones 13-16)
-	{ low = Enum.Material.Basalt, mid = Enum.Material.Slate, high = Enum.Material.Glacier },
-	{ low = Enum.Material.Basalt, mid = Enum.Material.CrackedLava, high = Enum.Material.Slate },
-	{ low = Enum.Material.CrackedLava, mid = Enum.Material.Basalt, high = Enum.Material.Slate },
-	{ low = Enum.Material.CrackedLava, mid = Enum.Material.CrackedLava, high = Enum.Material.Basalt },
+	-- === STRANGE ===
+	{
+		name = "Salt Flats",
+		length = 400,
+		layers = {
+			{ below = -3, mat = Enum.Material.Water },
+			{ below = 5, mat = Enum.Material.Salt },
+			{ below = 12, mat = Enum.Material.Limestone },
+			{ below = 999, mat = Enum.Material.Salt },
+		}
+	},
+	{
+		name = "Pale Cliffs",
+		length = 350,
+		layers = {
+			{ below = 0, mat = Enum.Material.Water },
+			{ below = 8, mat = Enum.Material.Limestone },
+			{ below = 15, mat = Enum.Material.Sandstone },
+			{ below = 999, mat = Enum.Material.Salt },
+		}
+	},
+	{
+		name = "Coral Gardens",
+		length = 400,
+		layers = {
+			{ below = -8, mat = Enum.Material.Water },
+			{ below = 0, mat = Enum.Material.Coral },
+			{ below = 6, mat = Enum.Material.Sand },
+			{ below = 999, mat = Enum.Material.Limestone },
+		}
+	},
+
+	-- === BIZARRE ===
+	{
+		name = "Volcanic Ridge",
+		length = 450,
+		layers = {
+			{ below = -5, mat = Enum.Material.Water },
+			{ below = 5, mat = Enum.Material.Basalt },
+			{ below = 12, mat = Enum.Material.CrackedLava },
+			{ below = 999, mat = Enum.Material.Basalt },
+		}
+	},
+	{
+		name = "Ice and Fire",
+		length = 400,
+		layers = {
+			{ below = 0, mat = Enum.Material.CrackedLava },
+			{ below = 10, mat = Enum.Material.Basalt },
+			{ below = 999, mat = Enum.Material.Glacier },
+		}
+	},
+	{
+		name = "Neon Wasteland",
+		length = 350,
+		layers = {
+			{ below = 5, mat = Enum.Material.Pavement },
+			{ below = 12, mat = Enum.Material.Metal },
+			{ below = 999, mat = Enum.Material.DiamondPlate },
+		}
+	},
+	{
+		name = "Hellscape",
+		length = 500,
+		layers = {
+			{ below = -10, mat = Enum.Material.Water },  -- Lava pools would be cool but water for now
+			{ below = 5, mat = Enum.Material.CrackedLava },
+			{ below = 15, mat = Enum.Material.Basalt },
+			{ below = 999, mat = Enum.Material.CrackedLava },
+		}
+	},
+	{
+		name = "The Void",
+		length = 600,
+		layers = {
+			{ below = 999, mat = Enum.Material.Slate },  -- Everything is dark grey
+		}
+	},
 }
 
--- Altitude thresholds for material selection
-local ALTITUDE = {
-	waterLevel = Config.waterLevel,  -- Below this = Water
-	lowToMid = 5,                    -- Below this = low material
-	midToHigh = 15,                  -- Below this = mid material, above = high
-}
+-- Build lookup: for any Z position, find the biome and get material for altitude
+local function getBiomeAt(z: number): { name: string, layers: { { below: number, mat: Enum.Material } } }
+	local cumulative = 0
+	for _, biome in ipairs(BIOMES) do
+		cumulative = cumulative + biome.length
+		if z < cumulative then
+			return biome
+		end
+	end
+	-- Past all biomes, return the last one
+	return BIOMES[#BIOMES]
+end
 
--- Get material based on zone (Z) and altitude (Y)
+-- Get material based on position (Z) and altitude (Y)
 local function getMaterialAt(z: number, y: number): Enum.Material
-	-- Below water level = terrain water
-	if y < ALTITUDE.waterLevel then
-		return Enum.Material.Water
+	local biome = getBiomeAt(z)
+
+	-- Find material based on altitude (layers are sorted by 'below' threshold)
+	for _, layer in ipairs(biome.layers) do
+		if y < layer.below then
+			return layer.mat
+		end
 	end
 
-	-- Get zone palette (progresses, doesn't cycle)
-	local zoneIndex = math.floor(z / Config.zoneLength) + 1
-	zoneIndex = math.min(zoneIndex, #ZONE_PALETTES)
-	local palette = ZONE_PALETTES[zoneIndex]
-
-	-- Select material based on altitude
-	if y < ALTITUDE.lowToMid then
-		return palette.low
-	elseif y < ALTITUDE.midToHigh then
-		return palette.mid
-	else
-		return palette.high
-	end
+	-- Fallback (shouldn't happen if last layer has below = 999)
+	return Enum.Material.Rock
 end
 
 -- Build the corridor cutting through continuous terrain
