@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.5.0 - Test mode pass-through, terrain fixes
+-- Glassline Server v2.6.0 - Longer corridor, more wave variety
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -15,9 +15,12 @@ PhysicsService:CollisionGroupSetCollidable("Obstacles", "TestModePlayers", false
 -- Per-player mode (randomized on each respawn)
 local playerModes: { [Player]: boolean } = {}  -- true = test mode, false = normal
 
--- Calculate corridor floor height at Z position (main wave)
+-- Calculate corridor floor height at Z position (multiple waves for variety)
 local function getFloorHeight(z: number): number
-	return math.sin(z * Config.waveFrequency) * Config.waveAmplitude
+	local mainWave = math.sin(z * Config.waveFrequency) * Config.waveAmplitude
+	local secondWave = math.sin(z * Config.waveFrequency * 2.7) * (Config.waveAmplitude * 0.3)
+	local thirdWave = math.cos(z * Config.waveFrequency * 0.5) * (Config.waveAmplitude * 0.5)
+	return mainWave + secondWave + thirdWave
 end
 
 -- Calculate side terrain height (locked at wall, undulates outward)

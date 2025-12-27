@@ -1,11 +1,11 @@
 --!strict
--- Config v2.5.0 - Bigger waves, water at Y=0
+-- Config v2.6.0 - Longer corridor, more variety
 
 return {
 	-- Corridor
 	corridorWidth = 8,        -- Slightly wider for comfort
 	corridorHeight = 30,      -- Taller for undulations
-	corridorLength = 2000,    -- Start shorter for testing
+	corridorLength = 5000,    -- Longer for variety
 
 	-- Movement (FAST)
 	runSpeed = 100,           -- Very fast
