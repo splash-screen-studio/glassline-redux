@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.13.0 - Fix floor holes, add bridge floor
+-- Glassline Server v2.14.0 - Part-based water (no terrain water)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -272,44 +272,48 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (outside corridor only)
-	-- IMPORTANT: Terrain water CANNOT be contained by parts in Roblox!
-	-- Water voxels ignore glass walls. Must keep water far from corridor.
-	-- Using 12-stud margin (3 voxels) to guarantee no bleeding.
-	local waterDepth = 25
-	local waterMargin = 12  -- 3 terrain voxels = bulletproof margin
-	local waterInnerX = w/2 + waterMargin
+	-- Water (Part-based, visual only - no terrain water!)
+	-- Terrain water cannot be contained by parts.
+	-- Part-based water can be positioned exactly against glass walls.
+	-- Players see water through glass but never enter it.
+	local waterFolder = Instance.new("Folder")
+	waterFolder.Name = "Water"
+	waterFolder.Parent = corridor
 
-	-- Left side water (starts 12 studs from corridor edge)
-	terrain:FillRegion(
-		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
-			Vector3.new(-waterInnerX, Config.waterLevel, len)
-		):ExpandToGrid(4),
-		4,
-		Enum.Material.Water
-	)
-	-- Right side water
-	terrain:FillRegion(
-		Region3.new(
-			Vector3.new(waterInnerX, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
-			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
-		):ExpandToGrid(4),
-		4,
-		Enum.Material.Water
-	)
+	local waterDepth = 30
+	local waterColor = Color3.fromRGB(30, 100, 180)
+	local waterTransparency = 0.3
 
-	-- Clear water ONLY - above the maximum possible floor height
-	-- Floor ranges from -waveAmplitude to +waveAmplitude, so clear above that
-	local maxFloorHeight = Config.waveAmplitude + 5  -- 25 + 5 = 30 (safety margin)
-	terrain:FillRegion(
-		Region3.new(
-			Vector3.new(-w/2 - 8, maxFloorHeight, ZONES.SPAWN_END),
-			Vector3.new(w/2 + 8, maxFloorHeight + 50, len)
-		):ExpandToGrid(4),
-		4,
-		Enum.Material.Air
-	)
+	-- Segment water like walls (Roblox 2048 limit)
+	for segStart = ZONES.TRANSITION_END, len, MAX_SEGMENT do
+		local segEnd = math.min(segStart + MAX_SEGMENT, len)
+		local segLen = segEnd - segStart
+		local segMidZ = segStart + segLen / 2
+
+		-- Left water (pressed against left glass wall)
+		local leftWater = Instance.new("Part")
+		leftWater.Name = "LeftWater_" .. segStart
+		leftWater.Anchored = true
+		leftWater.CanCollide = false  -- Inside terrain, doesn't need collision
+		leftWater.Size = Vector3.new(sideWidth, waterDepth, segLen)
+		leftWater.Position = Vector3.new(-w/2 - sideWidth/2 - 0.5, Config.waterLevel - waterDepth/2, segMidZ)
+		leftWater.Material = Enum.Material.Glass
+		leftWater.Color = waterColor
+		leftWater.Transparency = waterTransparency
+		leftWater.Parent = waterFolder
+
+		-- Right water (pressed against right glass wall)
+		local rightWater = Instance.new("Part")
+		rightWater.Name = "RightWater_" .. segStart
+		rightWater.Anchored = true
+		rightWater.CanCollide = false
+		rightWater.Size = Vector3.new(sideWidth, waterDepth, segLen)
+		rightWater.Position = Vector3.new(w/2 + sideWidth/2 + 0.5, Config.waterLevel - waterDepth/2, segMidZ)
+		rightWater.Material = Enum.Material.Glass
+		rightWater.Color = waterColor
+		rightWater.Transparency = waterTransparency
+		rightWater.Parent = waterFolder
+	end
 
 	corridor.Parent = workspace
 
