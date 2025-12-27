@@ -1,10 +1,14 @@
 --!strict
--- Glassline Server v2.2.0 - Side terrain undulates with variety outside walls
+-- Glassline Server v2.3.0 - Water outside only, random normal/test mode
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+
+-- Random mode selection at start
+local TEST_MODE = math.random() > 0.5  -- 50% chance test mode
+print("[Glassline] Mode: " .. (TEST_MODE and "TEST (no death)" or "NORMAL"))
 
 -- Calculate corridor floor height at Z position (main wave)
 local function getFloorHeight(z: number): number
@@ -81,6 +85,8 @@ local function setupDeathTouch(obstacles: Folder)
 		local hitbox = obstacle:FindFirstChild("Hitbox")
 		if hitbox and hitbox:GetAttribute("Deadly") then
 			hitbox.Touched:Connect(function(hit)
+				if TEST_MODE then return end  -- No death in test mode
+
 				local character = hit.Parent
 				if not character then return end
 				local humanoid = character:FindFirstChild("Humanoid")
@@ -207,11 +213,20 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water plane (continuous across corridor and sides)
-	-- Only fills where terrain dips below water level
+	-- Water (outside corridor only - presses against glass walls)
+	-- Left side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - 15, 0),
+			Vector3.new(-w/2 - sideWidth, Config.waterLevel - 20, 0),
+			Vector3.new(-w/2 - 0.5, Config.waterLevel, len)
+		):ExpandToGrid(4),
+		4,
+		Enum.Material.Water
+	)
+	-- Right side water
+	terrain:FillRegion(
+		Region3.new(
+			Vector3.new(w/2 + 0.5, Config.waterLevel - 20, 0),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
