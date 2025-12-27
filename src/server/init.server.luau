@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.14.1 - 70% test mode for easier testing
+-- Glassline Server v2.15.0 - Progressive terrain: realistic → bizarre
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -129,23 +129,39 @@ local function setupDeathTouch(obstacles: Folder)
 	end
 end
 
--- Scene themes (radically different)
+-- Scene themes: realistic → bizarre (no cycling back)
+-- Ordered from normal nature to increasingly alien/surreal
 local THEMES = {
-	Enum.Material.Grass,      -- Green meadow
-	Enum.Material.Snow,       -- Winter
-	Enum.Material.Sand,       -- Desert
-	Enum.Material.Rock,       -- Rocky
-	Enum.Material.Mud,        -- Swamp
-	Enum.Material.Ice,        -- Frozen
-	Enum.Material.Limestone,  -- Pale cliffs
-	Enum.Material.Basalt,     -- Dark volcanic
-	Enum.Material.CrackedLava,-- Hellscape
-	Enum.Material.Glacier,    -- Arctic
+	-- REALISTIC (zones 1-4)
+	Enum.Material.Grass,       -- 1: Green meadow - familiar start
+	Enum.Material.LeafyGrass,  -- 2: Lush forest floor
+	Enum.Material.Ground,      -- 3: Dirt path
+	Enum.Material.Sand,        -- 4: Beach/desert
+
+	-- NATURAL BUT HARSHER (zones 5-8)
+	Enum.Material.Rock,        -- 5: Rocky terrain
+	Enum.Material.Slate,       -- 6: Grey stone
+	Enum.Material.Snow,        -- 7: Winter
+	Enum.Material.Ice,         -- 8: Frozen
+
+	-- STRANGE (zones 9-12)
+	Enum.Material.Mud,         -- 9: Murky swamp
+	Enum.Material.Limestone,   -- 10: Pale alien cliffs
+	Enum.Material.Sandstone,   -- 11: Mars-like
+	Enum.Material.Salt,        -- 12: Crystalline white
+
+	-- ALIEN (zones 13-16)
+	Enum.Material.Glacier,     -- 13: Blue ice
+	Enum.Material.Basalt,      -- 14: Dark volcanic
+	Enum.Material.Pavement,    -- 15: Artificial/constructed
+	Enum.Material.CrackedLava, -- 16: Hellscape - final form
 }
 
--- Get theme for a Z position (left and right always match)
+-- Get theme for a Z position (progresses, doesn't cycle back)
 local function getThemeAt(z: number): Enum.Material
-	local zoneIndex = math.floor(z / Config.zoneLength) % #THEMES + 1
+	local zoneIndex = math.floor(z / Config.zoneLength) + 1
+	-- Clamp to last theme (stays bizarre once you reach the end)
+	zoneIndex = math.min(zoneIndex, #THEMES)
 	return THEMES[zoneIndex]
 end
 
