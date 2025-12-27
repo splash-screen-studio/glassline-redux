@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.6.0 - Longer corridor, more wave variety
+-- Glassline Server v2.7.0 - Clear spawn entrance
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -235,6 +235,17 @@ local function buildCorridor()
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Water
+	)
+
+	-- Clear terrain at spawn entrance (so player can exit)
+	local clearZone = 20
+	terrain:FillRegion(
+		Region3.new(
+			Vector3.new(-w/2 - 5, -50, -20),
+			Vector3.new(w/2 + 5, 50, clearZone)
+		):ExpandToGrid(4),
+		4,
+		Enum.Material.Air
 	)
 
 	corridor.Parent = workspace
