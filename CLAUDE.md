@@ -234,6 +234,42 @@ Difficulty = {
 
 ## Development Workflow
 
+### Tool Responsibilities
+
+| Tool | Purpose | Examples |
+|------|---------|----------|
+| **Rojo** (`src/*.luau`) | All game logic, version controlled | Scripts, modules, services, config |
+| **MCP** (`run_code`) | Place settings, testing | Lighting, Atmosphere, Sky, debugging |
+| **rbxcloud** | Publishing & cloud APIs | Deploy to Roblox, DataStore, messaging |
+
+### The Rule
+```
+If it has LOGIC → Rojo (src/)
+If it's PLACE SETTINGS → MCP (run_code)
+If you're TESTING → MCP (run_code)
+If you're PUBLISHING → rbxcloud
+```
+
+### Division of Work
+
+**MCP creates (one-time place setup):**
+- `Lighting` - Ambient, Brightness, ColorShift
+- `Atmosphere` - Fog, Haze, Glare
+- `Sky` - Skybox properties
+- `SoundService` - Volume settings
+- `Terrain` - If needed
+
+**Rojo creates (all game code):**
+- `src/server/` - All server scripts and modules
+- `src/client/` - All client scripts and modules
+- `src/shared/` - Shared config and utilities
+
+**rbxcloud handles:**
+- `rbxcloud place publish` - Deploy place file
+- `rbxcloud experience` - Update experience settings
+- `rbxcloud datastore` - Manage player data
+- `rbxcloud messaging` - Cross-server messaging
+
 ### Daily Commands
 
 ```bash
@@ -248,6 +284,20 @@ selene src/
 
 # Format
 stylua src/
+
+# Build place file
+rojo build -o glassline.rbxl
+
+# Publish to Roblox
+source .env && rbxcloud place publish -p $ROBLOX_PLACE_ID -u $ROBLOX_EXPERIENCE_ID -a "$ROBLOX_API_KEY" -f glassline.rbxl
+```
+
+### Environment Variables (.env)
+
+```bash
+ROBLOX_EXPERIENCE_ID=9447917120
+ROBLOX_PLACE_ID=83423593675985
+ROBLOX_API_KEY=<your-api-key>
 ```
 
 ### Run Tests (in Studio command bar)
