@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.10.0 - Segmented walls (Roblox 2048 limit)
+-- Glassline Server v2.11.0 - Water stays outside glass walls
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -272,13 +272,18 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (outside corridor only - starts in GAME ZONE with side terrain)
+	-- Water (outside corridor only - must not penetrate glass walls)
+	-- Glass walls are at X = ±(w/2 + 0.25), thickness 0.5
+	-- Water must stop outside the glass: at least 1 stud margin for terrain voxels
 	local waterDepth = 25
+	local waterMargin = 1  -- Keep water 1 stud outside glass wall
+	local waterInnerX = w/2 + 0.5 + waterMargin  -- Glass outer edge + margin
+
 	-- Left side water
 	terrain:FillRegion(
 		Region3.new(
 			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
-			Vector3.new(-w/2, Config.waterLevel, len)
+			Vector3.new(-waterInnerX, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Water
@@ -286,12 +291,32 @@ local function buildCorridor()
 	-- Right side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(w/2, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
+			Vector3.new(waterInnerX, Config.waterLevel - waterDepth, ZONES.TRANSITION_END),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Water
 	)
+
+	-- ROBUST: Clear any terrain that leaked into corridor interior
+	-- This ensures water/terrain never appears inside the glass walls
+	terrain:FillRegion(
+		Region3.new(
+			Vector3.new(-w/2, -50, ZONES.SPAWN_END),
+			Vector3.new(w/2, Config.waterLevel + 10, len)
+		):ExpandToGrid(4),
+		4,
+		Enum.Material.Air
+	)
+	-- Then re-fill the corridor floor (which we just cleared above water level)
+	for z = ZONES.SPAWN_END, len, resolution do
+		local corridorY = getFloorHeight(z)
+		local corridorRegion = Region3.new(
+			Vector3.new(-w/2, corridorY - 40, z),
+			Vector3.new(w/2, corridorY, z + resolution)
+		):ExpandToGrid(resolution)
+		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
+	end
 
 	corridor.Parent = workspace
 
