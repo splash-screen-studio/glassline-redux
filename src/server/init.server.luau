@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.14.0 - Part-based water (no terrain water)
+-- Glassline Server v2.14.1 - 70% test mode for easier testing
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -410,15 +410,21 @@ local function setupPlayer(player: Player)
 		local humanoid = character:WaitForChild("Humanoid")
 		local hrp = character:WaitForChild("HumanoidRootPart")
 
-		-- Randomize mode on each respawn
-		playerModes[player] = math.random() > 0.5
+		-- Randomize mode on each respawn (70% test mode for easier testing)
+		playerModes[player] = math.random() < 0.7
 		local isTestMode = playerModes[player]
-		local mode = isTestMode and "TEST" or "NORMAL"
-		print("[Server] " .. player.Name .. " respawned in " .. mode .. " mode")
+		local mode = isTestMode and "TEST (no death)" or "NORMAL (deadly)"
+		print("[Server] " .. player.Name .. " spawned in " .. mode .. " mode")
 
 		-- Set collision group based on mode
 		if isTestMode then
 			setCharacterCollisionGroup(character, "TestModePlayers")
+			-- Also catch any parts added later (accessories, tools)
+			character.DescendantAdded:Connect(function(desc)
+				if desc:IsA("BasePart") then
+					desc.CollisionGroup = "TestModePlayers"
+				end
+			end)
 		end
 
 		-- Force exact spawn position and orientation
