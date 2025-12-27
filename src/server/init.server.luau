@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.12.0 - Bulletproof water margin (12 studs)
+-- Glassline Server v2.13.0 - Fix floor holes, add bridge floor
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -299,13 +299,13 @@ local function buildCorridor()
 		Enum.Material.Water
 	)
 
-	-- BELT AND SUSPENDERS: Clear entire corridor interior of any terrain except floor
-	-- Clear from glass wall to glass wall, above the floor
-	local clearMargin = 8  -- Clear 8 studs past corridor edge to catch any voxel bleed
+	-- Clear water ONLY - above the maximum possible floor height
+	-- Floor ranges from -waveAmplitude to +waveAmplitude, so clear above that
+	local maxFloorHeight = Config.waveAmplitude + 5  -- 25 + 5 = 30 (safety margin)
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - clearMargin, Config.waterLevel - 10, ZONES.SPAWN_END),
-			Vector3.new(w/2 + clearMargin, Config.waterLevel + 50, len)
+			Vector3.new(-w/2 - 8, maxFloorHeight, ZONES.SPAWN_END),
+			Vector3.new(w/2 + 8, maxFloorHeight + 50, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Air
@@ -361,6 +361,18 @@ local function buildCorridor()
 	spawnFloor.Parent = spawnRoom
 
 	spawnRoom.Parent = workspace
+
+	-- Bridge floor: covers spawn-to-corridor transition
+	-- Terrain voxels may not align perfectly, this Part guarantees no gap
+	local bridgeLength = 20  -- Covers Z=0 to Z=20
+	local bridgeFloor = Instance.new("Part")
+	bridgeFloor.Name = "BridgeFloor"
+	bridgeFloor.Anchored = true
+	bridgeFloor.Size = Vector3.new(w, 1, bridgeLength)
+	bridgeFloor.Position = Vector3.new(0, ZONES.SPAWN_FLOOR_Y - 0.5, bridgeLength / 2)
+	bridgeFloor.Material = Enum.Material.SmoothPlastic
+	bridgeFloor.Color = Color3.fromRGB(35, 35, 40)
+	bridgeFloor.Parent = workspace
 
 	-- Spawn location (in spawn room, facing +Z into corridor)
 	local spawn = Instance.new("SpawnLocation")
