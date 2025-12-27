@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.0.0 - Terrain corridor with undulations and themed zones
+-- Glassline Server v2.1.0 - Continuous terrain, corridor cuts through landscape
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -99,7 +99,7 @@ local function getThemeAt(z: number): Enum.Material
 	return THEMES[zoneIndex]
 end
 
--- Build the corridor with smooth terrain undulations
+-- Build the corridor cutting through continuous terrain
 local function buildCorridor()
 	local terrain = workspace.Terrain
 	local corridor = Instance.new("Model")
@@ -113,29 +113,30 @@ local function buildCorridor()
 	-- Fill terrain using voxels for smooth undulations
 	local resolution = 4  -- Terrain resolution
 
-	-- Generate terrain along the corridor
+	-- Generate continuous terrain - corridor cuts through it
 	for z = 0, len, resolution do
-		local floorY = getFloorHeight(z)
+		-- Same height for corridor and sides (continuous terrain)
+		local terrainY = getFloorHeight(z)
 		local theme = getThemeAt(z)
 
-		-- Corridor floor (dark matte - always Asphalt)
+		-- Corridor floor (dark matte Asphalt - the "road" through terrain)
 		local corridorRegion = Region3.new(
-			Vector3.new(-w/2, floorY - 20, z),
-			Vector3.new(w/2, floorY, z + resolution)
+			Vector3.new(-w/2, terrainY - 30, z),
+			Vector3.new(w/2, terrainY, z + resolution)
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
 
-		-- Left side terrain (themed, matches right)
+		-- Left side terrain (same height as corridor - continuous surface)
 		local leftRegion = Region3.new(
-			Vector3.new(-w/2 - sideWidth, floorY - 20, z),
-			Vector3.new(-w/2 - 1, floorY, z + resolution)
+			Vector3.new(-w/2 - sideWidth, terrainY - 30, z),
+			Vector3.new(-w/2 - 0.5, terrainY, z + resolution)
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(leftRegion, resolution, theme)
 
-		-- Right side terrain (themed, matches left)
+		-- Right side terrain (exactly matches left - continuous surface)
 		local rightRegion = Region3.new(
-			Vector3.new(w/2 + 1, floorY - 20, z),
-			Vector3.new(w/2 + sideWidth, floorY, z + resolution)
+			Vector3.new(w/2 + 0.5, terrainY - 30, z),
+			Vector3.new(w/2 + sideWidth, terrainY, z + resolution)
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(rightRegion, resolution, theme)
 	end
@@ -187,10 +188,11 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (fills low areas)
+	-- Water plane (continuous across corridor and sides)
+	-- Only fills where terrain dips below water level
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - 10, 0),
+			Vector3.new(-w/2 - sideWidth, Config.waterLevel - 15, 0),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,

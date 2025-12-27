@@ -1,5 +1,5 @@
 --!strict
--- Config v2.0.0 - Core gameplay config with terrain undulation and themed zones
+-- Config v2.1.0 - Slower undulations, continuous terrain through corridor
 
 return {
 	-- Corridor
@@ -18,13 +18,13 @@ return {
 	obstacleWidth = 0.6,      -- Thin pillars (was 1.5)
 	hitboxShrink = 0.3,       -- Shrink hitbox for forgiving collision
 
-	-- Terrain undulation
+	-- Terrain undulation (slower, gentler waves)
 	segmentLength = 20,       -- Length of each floor segment
-	waveAmplitude = 15,       -- How high/low the floor goes
-	waveFrequency = 0.008,    -- How often waves occur (lower = longer waves)
-	waterLevel = -5,          -- Y level where water starts
+	waveAmplitude = 20,       -- How high/low the terrain goes
+	waveFrequency = 0.003,    -- Slower waves (was 0.008)
+	waterLevel = -8,          -- Y level where water exists
 
-	-- Scene themes (left and right match, change every zoneLength)
-	zoneLength = 200,         -- How often themes change
-	sideWidth = 100,          -- Terrain width on each side
+	-- Scene themes (left and right always identical - continuous terrain)
+	zoneLength = 300,         -- How often themes change
+	sideWidth = 120,          -- Terrain width on each side
 }

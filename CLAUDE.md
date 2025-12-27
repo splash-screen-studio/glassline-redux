@@ -288,8 +288,8 @@ stylua src/
 # Build place file
 rojo build -o glassline.rbxl
 
-# Publish to Roblox
-source .env && rbxcloud place publish -p $ROBLOX_PLACE_ID -u $ROBLOX_EXPERIENCE_ID -a "$ROBLOX_API_KEY" -f glassline.rbxl
+# Publish to Roblox (rojo upload uses Open Cloud API)
+source .env && rojo upload --api_key "$ROBLOX_API_KEY" --asset_id $ROBLOX_PLACE_ID --universe_id $ROBLOX_EXPERIENCE_ID
 ```
 
 ### Environment Variables (.env)
