@@ -1,10 +1,16 @@
 --!strict
--- Glassline Server v2.4.0 - Random mode on each respawn
+-- Glassline Server v2.5.0 - Test mode pass-through, terrain fixes
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local PhysicsService = game:GetService("PhysicsService")
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
+
+-- Collision groups for test mode pass-through
+PhysicsService:RegisterCollisionGroup("Obstacles")
+PhysicsService:RegisterCollisionGroup("TestModePlayers")
+PhysicsService:CollisionGroupSetCollidable("Obstacles", "TestModePlayers", false)
 
 -- Per-player mode (randomized on each respawn)
 local playerModes: { [Player]: boolean } = {}  -- true = test mode, false = normal
@@ -46,28 +52,18 @@ local function buildObstacles()
 		-- Get floor height at this Z
 		local floorY = getFloorHeight(z)
 
-		-- Visible pillar (thin, non-collidable)
+		-- Visible pillar (solid obstacle)
 		local pillar = Instance.new("Part")
 		pillar.Name = "Obstacle"
 		pillar.Anchored = true
-		pillar.CanCollide = false  -- Visual only
+		pillar.CanCollide = true  -- Solid - must dodge
+		pillar.CollisionGroup = "Obstacles"
 		pillar.Size = Vector3.new(w, pillarHeight, w)
 		pillar.Position = Vector3.new(x, floorY + pillarHeight/2, z)
 		pillar.Material = Enum.Material.Neon
 		pillar.Color = Config.obstacleColor
+		pillar:SetAttribute("Deadly", true)
 		pillar.Parent = obstacles
-
-		-- Smaller invisible hitbox (forgiving)
-		local hitbox = Instance.new("Part")
-		hitbox.Name = "Hitbox"
-		hitbox.Anchored = true
-		hitbox.CanCollide = false
-		hitbox.Transparency = 1
-		local shrink = Config.hitboxShrink
-		hitbox.Size = Vector3.new(w - shrink, pillarHeight - 1, w - shrink)
-		hitbox.Position = Vector3.new(x, floorY + pillarHeight/2, z)
-		hitbox.Parent = pillar
-		hitbox:SetAttribute("Deadly", true)
 
 		count = count + 1
 		z = z + Config.obstacleSpacing
@@ -77,13 +73,11 @@ local function buildObstacles()
 	return obstacles
 end
 
--- Handle death (checks hitboxes inside obstacles)
+-- Handle death (obstacle touch)
 local function setupDeathTouch(obstacles: Folder)
 	for _, obstacle in obstacles:GetChildren() do
-		-- Find hitbox child
-		local hitbox = obstacle:FindFirstChild("Hitbox")
-		if hitbox and hitbox:GetAttribute("Deadly") then
-			hitbox.Touched:Connect(function(hit)
+		if obstacle:GetAttribute("Deadly") then
+			obstacle.Touched:Connect(function(hit)
 				local character = hit.Parent
 				if not character then return end
 
@@ -134,7 +128,7 @@ local function buildCorridor()
 	local resolution = 4  -- Terrain resolution
 
 	-- Generate continuous terrain - corridor cuts through it
-	local stripWidth = 8  -- Width of each terrain strip for height variation
+	local stripWidth = 12  -- Width of each terrain strip
 
 	for z = 0, len, resolution do
 		local corridorY = getFloorHeight(z)
@@ -142,26 +136,31 @@ local function buildCorridor()
 
 		-- Corridor floor (dark matte Asphalt - the "road" through terrain)
 		local corridorRegion = Region3.new(
-			Vector3.new(-w/2, corridorY - 30, z),
+			Vector3.new(-w/2, corridorY - 40, z),
 			Vector3.new(w/2, corridorY, z + resolution)
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
 
 		-- Side terrain in strips (height varies with distance from wall)
-		for dist = 0, sideWidth - stripWidth, stripWidth do
-			local stripY = getSideTerrainHeight(z, dist + stripWidth/2)
+		for stripStart = 0, sideWidth - stripWidth, stripWidth do
+			local distFromWall = stripStart + stripWidth / 2
+			local stripY = getSideTerrainHeight(z, distFromWall)
 
-			-- Left side strip
+			-- Left side strip (going outward from wall)
+			local leftX1 = -w/2 - stripStart - stripWidth
+			local leftX2 = -w/2 - stripStart
 			local leftRegion = Region3.new(
-				Vector3.new(-w/2 - dist - stripWidth, stripY - 30, z),
-				Vector3.new(-w/2 - dist - 0.5, stripY, z + resolution)
+				Vector3.new(leftX1, stripY - 40, z),
+				Vector3.new(leftX2, stripY, z + resolution)
 			):ExpandToGrid(resolution)
 			terrain:FillRegion(leftRegion, resolution, theme)
 
 			-- Right side strip (mirrors left exactly)
+			local rightX1 = w/2 + stripStart
+			local rightX2 = w/2 + stripStart + stripWidth
 			local rightRegion = Region3.new(
-				Vector3.new(w/2 + dist + 0.5, stripY - 30, z),
-				Vector3.new(w/2 + dist + stripWidth, stripY, z + resolution)
+				Vector3.new(rightX1, stripY - 40, z),
+				Vector3.new(rightX2, stripY, z + resolution)
 			):ExpandToGrid(resolution)
 			terrain:FillRegion(rightRegion, resolution, theme)
 		end
@@ -215,11 +214,12 @@ local function buildCorridor()
 	end
 
 	-- Water (outside corridor only - presses against glass walls)
+	local waterDepth = 25
 	-- Left side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - 20, 0),
-			Vector3.new(-w/2 - 0.5, Config.waterLevel, len)
+			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, 0),
+			Vector3.new(-w/2, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Water
@@ -227,7 +227,7 @@ local function buildCorridor()
 	-- Right side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(w/2 + 0.5, Config.waterLevel - 20, 0),
+			Vector3.new(w/2, Config.waterLevel - waterDepth, 0),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
@@ -301,6 +301,15 @@ local SPAWN_POS = Vector3.new(0, 3, -7)
 local LOOK_AT = Vector3.new(0, 3, 100)  -- Look down the corridor (+Z)
 local SPAWN_CFRAME = CFrame.lookAt(SPAWN_POS, LOOK_AT)
 
+-- Set collision group for all character parts
+local function setCharacterCollisionGroup(character: Model, groupName: string)
+	for _, part in character:GetDescendants() do
+		if part:IsA("BasePart") then
+			part.CollisionGroup = groupName
+		end
+	end
+end
+
 -- Fast player setup
 local function setupPlayer(player: Player)
 	player.CharacterAdded:Connect(function(character)
@@ -309,8 +318,14 @@ local function setupPlayer(player: Player)
 
 		-- Randomize mode on each respawn
 		playerModes[player] = math.random() > 0.5
-		local mode = playerModes[player] and "TEST" or "NORMAL"
+		local isTestMode = playerModes[player]
+		local mode = isTestMode and "TEST" or "NORMAL"
 		print("[Server] " .. player.Name .. " respawned in " .. mode .. " mode")
+
+		-- Set collision group based on mode
+		if isTestMode then
+			setCharacterCollisionGroup(character, "TestModePlayers")
+		end
 
 		-- Force exact spawn position and orientation
 		hrp.CFrame = SPAWN_CFRAME

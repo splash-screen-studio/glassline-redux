@@ -1,5 +1,5 @@
 --!strict
--- Config v2.1.0 - Slower undulations, continuous terrain through corridor
+-- Config v2.5.0 - Bigger waves, water at Y=0
 
 return {
 	-- Corridor
@@ -20,9 +20,9 @@ return {
 
 	-- Terrain undulation (slower, gentler waves)
 	segmentLength = 20,       -- Length of each floor segment
-	waveAmplitude = 20,       -- How high/low the terrain goes
-	waveFrequency = 0.003,    -- Slower waves (was 0.008)
-	waterLevel = -8,          -- Y level where water exists
+	waveAmplitude = 25,       -- How high/low the terrain goes (bigger for underwater)
+	waveFrequency = 0.002,    -- Even slower waves
+	waterLevel = 0,           -- Y=0 is water level (terrain dips below)
 
 	-- Scene themes (left and right always identical - continuous terrain)
 	zoneLength = 300,         -- How often themes change
