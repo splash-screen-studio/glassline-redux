@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.7.0 - Clear spawn entrance
+-- Glassline Server v2.8.0 - Seamless spawn to corridor
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -133,7 +133,10 @@ local function buildCorridor()
 	-- Generate continuous terrain - corridor cuts through it
 	local stripWidth = 12  -- Width of each terrain strip
 
-	for z = 0, len, resolution do
+	-- Corridor floor starts before spawn room so there's no gap
+	local corridorStartZ = -20
+
+	for z = corridorStartZ, len, resolution do
 		local corridorY = getFloorHeight(z)
 		local theme = getThemeAt(z)
 
@@ -144,28 +147,31 @@ local function buildCorridor()
 		):ExpandToGrid(resolution)
 		terrain:FillRegion(corridorRegion, resolution, Enum.Material.Asphalt)
 
-		-- Side terrain in strips (height varies with distance from wall)
-		for stripStart = 0, sideWidth - stripWidth, stripWidth do
-			local distFromWall = stripStart + stripWidth / 2
-			local stripY = getSideTerrainHeight(z, distFromWall)
+		-- Side terrain starts after spawn exit (Z=40) to not block entrance
+		if z >= 40 then
+			-- Side terrain in strips (height varies with distance from wall)
+			for stripStart = 0, sideWidth - stripWidth, stripWidth do
+				local distFromWall = stripStart + stripWidth / 2
+				local stripY = getSideTerrainHeight(z, distFromWall)
 
-			-- Left side strip (going outward from wall)
-			local leftX1 = -w/2 - stripStart - stripWidth
-			local leftX2 = -w/2 - stripStart
-			local leftRegion = Region3.new(
-				Vector3.new(leftX1, stripY - 40, z),
-				Vector3.new(leftX2, stripY, z + resolution)
-			):ExpandToGrid(resolution)
-			terrain:FillRegion(leftRegion, resolution, theme)
+				-- Left side strip (going outward from wall)
+				local leftX1 = -w/2 - stripStart - stripWidth
+				local leftX2 = -w/2 - stripStart
+				local leftRegion = Region3.new(
+					Vector3.new(leftX1, stripY - 40, z),
+					Vector3.new(leftX2, stripY, z + resolution)
+				):ExpandToGrid(resolution)
+				terrain:FillRegion(leftRegion, resolution, theme)
 
-			-- Right side strip (mirrors left exactly)
-			local rightX1 = w/2 + stripStart
-			local rightX2 = w/2 + stripStart + stripWidth
-			local rightRegion = Region3.new(
-				Vector3.new(rightX1, stripY - 40, z),
-				Vector3.new(rightX2, stripY, z + resolution)
-			):ExpandToGrid(resolution)
-			terrain:FillRegion(rightRegion, resolution, theme)
+				-- Right side strip (mirrors left exactly)
+				local rightX1 = w/2 + stripStart
+				local rightX2 = w/2 + stripStart + stripWidth
+				local rightRegion = Region3.new(
+					Vector3.new(rightX1, stripY - 40, z),
+					Vector3.new(rightX2, stripY, z + resolution)
+				):ExpandToGrid(resolution)
+				terrain:FillRegion(rightRegion, resolution, theme)
+			end
 		end
 	end
 
@@ -216,12 +222,13 @@ local function buildCorridor()
 		ceilSeg.Parent = ceilingFolder
 	end
 
-	-- Water (outside corridor only - presses against glass walls)
+	-- Water (outside corridor only - presses against glass walls, starts after spawn)
 	local waterDepth = 25
+	local waterStartZ = 40  -- Same as side terrain start
 	-- Left side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, 0),
+			Vector3.new(-w/2 - sideWidth, Config.waterLevel - waterDepth, waterStartZ),
 			Vector3.new(-w/2, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
@@ -230,22 +237,11 @@ local function buildCorridor()
 	-- Right side water
 	terrain:FillRegion(
 		Region3.new(
-			Vector3.new(w/2, Config.waterLevel - waterDepth, 0),
+			Vector3.new(w/2, Config.waterLevel - waterDepth, waterStartZ),
 			Vector3.new(w/2 + sideWidth, Config.waterLevel, len)
 		):ExpandToGrid(4),
 		4,
 		Enum.Material.Water
-	)
-
-	-- Clear terrain at spawn entrance (so player can exit)
-	local clearZone = 20
-	terrain:FillRegion(
-		Region3.new(
-			Vector3.new(-w/2 - 5, -50, -20),
-			Vector3.new(w/2 + 5, 50, clearZone)
-		):ExpandToGrid(4),
-		4,
-		Enum.Material.Air
 	)
 
 	corridor.Parent = workspace
