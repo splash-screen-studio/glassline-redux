@@ -1,14 +1,13 @@
 --!strict
--- Glassline Server v2.3.0 - Water outside only, random normal/test mode
+-- Glassline Server v2.4.0 - Random mode on each respawn
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Config = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Config"))
 
--- Random mode selection at start
-local TEST_MODE = math.random() > 0.5  -- 50% chance test mode
-print("[Glassline] Mode: " .. (TEST_MODE and "TEST (no death)" or "NORMAL"))
+-- Per-player mode (randomized on each respawn)
+local playerModes: { [Player]: boolean } = {}  -- true = test mode, false = normal
 
 -- Calculate corridor floor height at Z position (main wave)
 local function getFloorHeight(z: number): number
@@ -85,10 +84,12 @@ local function setupDeathTouch(obstacles: Folder)
 		local hitbox = obstacle:FindFirstChild("Hitbox")
 		if hitbox and hitbox:GetAttribute("Deadly") then
 			hitbox.Touched:Connect(function(hit)
-				if TEST_MODE then return end  -- No death in test mode
-
 				local character = hit.Parent
 				if not character then return end
+
+				local player = Players:GetPlayerFromCharacter(character)
+				if player and playerModes[player] then return end  -- Test mode = no death
+
 				local humanoid = character:FindFirstChild("Humanoid")
 				if humanoid and humanoid.Health > 0 then
 					humanoid.Health = 0
@@ -306,13 +307,16 @@ local function setupPlayer(player: Player)
 		local humanoid = character:WaitForChild("Humanoid")
 		local hrp = character:WaitForChild("HumanoidRootPart")
 
+		-- Randomize mode on each respawn
+		playerModes[player] = math.random() > 0.5
+		local mode = playerModes[player] and "TEST" or "NORMAL"
+		print("[Server] " .. player.Name .. " respawned in " .. mode .. " mode")
+
 		-- Force exact spawn position and orientation
 		hrp.CFrame = SPAWN_CFRAME
 
 		humanoid.WalkSpeed = Config.runSpeed
 		humanoid.JumpPower = Config.jumpPower
-
-		print("[Server] " .. player.Name .. " spawned facing +Z")
 	end)
 end
 
