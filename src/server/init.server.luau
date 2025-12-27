@@ -1,5 +1,5 @@
 --!strict
--- Glassline Server v2.9.0 - Robust zone framework
+-- Glassline Server v2.9.1 - Fix glass wall positioning
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -209,9 +209,12 @@ local function buildCorridor()
 		end
 	end
 
-	-- Glass walls
-	local wallHeight = h + Config.waveAmplitude * 2
-	local wallY = Config.waveAmplitude
+	-- Glass walls (must cover full height range: from lowest floor to ceiling)
+	-- Floor ranges from Y=0 (spawn) through wave oscillation (-amplitude to +amplitude)
+	local lowestFloor = -Config.waveAmplitude
+	local highestCeiling = Config.waveAmplitude + h
+	local wallHeight = highestCeiling - lowestFloor + 20  -- Extra margin
+	local wallY = (lowestFloor + highestCeiling) / 2  -- Center of wall
 
 	local leftWall = Instance.new("Part")
 	leftWall.Name = "LeftWall"
